@@ -7,21 +7,11 @@ from states.survey import SurveyStates
 from typing import Optional
 from logger import logger
 
-INTERESTS_QUESTION_MESSAGE = """
-Напишите, что вам интересно — например: стрит-арт, история, кофейни, панорамы и т.д.
-"""
+import sessions_data
 
-TIME_QUESTION_MESSAGE = """
-Сколько у вас времени на прогулку? Ответ укажите в минутах.
-"""
 
-ERROR_TIME_INPUT_QUESTION_MESSAGE = """
-Сколько у вас времени на прогулку? Ответ укажите в минутах целым числом. Например, 60
-"""
 
-POSITION_QUESTION_MESSAGE = """
-Отправь свой адрес или геопозицию — оттуда начнём маршрут!
-"""
+
 
 ERROR_WRONG_REQUEST_MESSAGE = """
 Ваше сообщение не было корректно обработано. Пожалуйста, следуйте инструкциям.
@@ -33,14 +23,16 @@ SESSION_NOT_FOUND_MESSAGE = """
 Сессия не найдена. Начните с /start.
 """
 
-SEND_LOCATION_BUTTON_TEXT = """
-Отправить моё местоположение
-"""
+
 router = Router()
 
 #Старт-опроса-----------------------------------------------------------------------------------------#
 @router.message(F.text == CONTINUE)
 async def start_survey(message: Message, state: FSMContext):
+    INTERESTS_QUESTION_MESSAGE = """
+    Напишите, что вам интересно — например: стрит-арт, история, кофейни, панорамы и т.д.
+    """
+
     await state.set_state(SurveyStates.interests)
     await message.answer(
         INTERESTS_QUESTION_MESSAGE,
@@ -50,6 +42,10 @@ async def start_survey(message: Message, state: FSMContext):
 #Интересы-----------------------------------------------------------------------------------------#
 @router.message(SurveyStates.interests)
 async def handle_interests(message: Message, state: FSMContext):
+    TIME_QUESTION_MESSAGE = """
+    Сколько у вас времени на прогулку? Ответ укажите в минутах.
+    """
+
     await state.update_data(interests=message.text.strip())
     logger.info(f"Пользователь {message.from_user.id} указал интересы: {message.text}")
     await state.set_state(SurveyStates.time)
@@ -58,6 +54,17 @@ async def handle_interests(message: Message, state: FSMContext):
 #Время-----------------------------------------------------------------------------------------#
 @router.message(SurveyStates.time)
 async def handle_time(message: Message, state: FSMContext):
+    SEND_LOCATION_BUTTON_TEXT = """
+    Отправить моё местоположение
+    """
+
+    ERROR_TIME_INPUT_QUESTION_MESSAGE = """
+    Сколько у вас времени на прогулку? Ответ укажите в минутах целым числом в пределах от 1 до 1440. Например, 60
+    """
+
+    POSITION_QUESTION_MESSAGE = """
+    Отправь свой адрес или геопозицию — оттуда начнём маршрут!
+    """
     def validate_time(time : str) -> Optional[int]:
         try:
             minutes = int(time)
@@ -83,7 +90,7 @@ async def handle_time(message: Message, state: FSMContext):
                 resize_keyboard=True,
                 one_time_keyboard=True
             )
-    await message.answer(SEND_LOCATION_BUTTON_TEXT, reply_markup=markup)
+    await message.answer(POSITION_QUESTION_MESSAGE, reply_markup=markup)
 
 #Местоположение-----------------------------------------------------------------------------------------#
 #Не работает блин
@@ -118,6 +125,9 @@ async def location_text_fallback(message: Message, state: FSMContext):
         f"Локация: {data['location']}",
         reply_markup=ReplyKeyboardRemove()
     )
+    from asyncio import create_task
+    create_task(sessions_data.process_request((message.from_user.id, 
+                                               sessions_data.UserAnswers(data['interests'],data['location'],data['time']))))
     await state.clear()
 
 #--------------------------------------------------------------------------------------------------#
